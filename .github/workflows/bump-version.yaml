@@ -1,0 +1,88 @@
+name: Bump devit version
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  REGEX: v[0-9]+\.[0-9]+\.[0-9]+
+  REGEX_CARGO: '[0-9]+\.[0-9]+\.[0-9]+'
+  FLAKE: flake.nix
+  CARGO: Cargo.toml
+  BRANCH_NAME: auto-update/devit
+  GIT_AUTHOR_NAME: ${{ github.repository_owner }}
+  GIT_AUTHOR_EMAIL: ${{ github.repository_owner }}@users.noreply.github.com
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Get the release version from the tag
+        shell: bash
+        id: version
+        if: env.DEVIT_VERSION == ''
+        run: |
+          export new_version=${{ github.ref_name }}
+          echo $new_version
+          echo "DEVIT_VERSION=$new_version" >> $GITHUB_ENV
+
+      - name: Get old flake version
+        run: |
+          export version=$(grep -owE ${{ env.REGEX }} ${{ env.FLAKE }})
+          echo "OLD_VERSION_FLAKE=$version" >> $GITHUB_ENV
+
+      - name: Update version in flake.nix
+        run: sed -i "s/$OLD_VERSION_FLAKE/$DEVIT_VERSION/g" ${{ env.FLAKE }}
+
+      - name: Get old Cargo version
+        run: |
+          export version=$(grep -m 1 -owE ${{ env.REGEX_CARGO }} ${{ env.CARGO }})
+          echo $version
+          echo "OLD_VERSION_CARGO=$version" >> $GITHUB_ENV
+
+      - name: Update version in Cargo.toml
+        run: |
+          export new_version="$(echo $DEVIT_VERSION | cut -c2-)"
+          sed -i "0,/$OLD_VERSION_CARGO/s//$new_version/" ${{ env.CARGO }}
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Build to generate new Cargo.lock with new version
+        run: cargo build
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: "update: flake and cargo package version"
+          author: ${{ env.GIT_AUTHOR_NAME }} <${{ env.GIT_AUTHOR_EMAIL }}>
+          title: 'devit: ${{ env.OLD_VERSION_FLAKE }} -> ${{ env.DEVIT_VERSION }} '
+          branch: ${{ env.BRANCH_NAME }}
+          base: main
+          signoff: true
+          delete-branch: true
+          labels: automerge
+          assignees: zoedsoupe
+          reviewers: zoedsoupe
+
+      - name: Auto Merge PR
+        id: automerge
+        uses: pascalgn/automerge-action@v0.15.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: squash

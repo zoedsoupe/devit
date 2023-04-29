@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      v*.*.*
+
+env:
+  MACOSX_DEPLOYMENT_TARGET: 10.7
+
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      devit_version: ${{ env.DEVIT_VERSION }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Get the release version from the tag
+        shell: bash
+        if: env.DEVIT_VERSION == ''
+        run: |
+          export new_version=${{ github.ref_name }}
+          echo "DEVIT_VERSION=$new_version" >> $GITHUB_ENV
+          echo "version is: ${{ env.DEVIT_VERSION }}"
+
+      - name: Build Changelog
+        id: build_changelog
+        uses: mikepenz/release-changelog-builder-action@v2.9.0
+        with:
+          configuration: ".github/changelog-configuration.json"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub release
+        id: release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.DEVIT_VERSION }}
+          release_name: ${{ env.DEVIT_VERSION }}
+          body: ${{steps.build_changelog.outputs.changelog}}
+
+  build-release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Build Release Assets
+    needs: ['create-release']
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: cli
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+
+          - target: i686-unknown-linux-musl
+            os: ubuntu-latest
+
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+
+          - target: arm-unknown-linux-musleabihf
+            os: ubuntu-latest
+
+          - target: x86_64-apple-darwin
+            os: macOS-latest
+
+          - target: aarch64-apple-darwin
+            os: macOS-latest
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+          - target: i686-pc-windows-msvc
+            os: windows-latest
+
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 1
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.target }}
+        profile: minimal
+        override: true
+
+    - name: Build release binary
+      run: cargo build --release --locked --target ${{ matrix.target }}
+
+    - name: Prepare binaries [Windows]
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        strip devit.exe
+        7z a ../../../devit-${{ needs.create-release.outputs.devit_version }}-${{ matrix.target }}.zip devit.exe
+        cd -
+
+    - name: Prepare binaries [-linux]
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        strip devit || true
+        tar czvf ../../../devit-${{ needs.create-release.outputs.devit_version }}-${{ matrix.target }}.tar.gz devit
+        cd -
+
+    - name: Upload release archive
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.create-release.outputs.devit_version }}
+        files: devit-${{ needs.create-release.outputs.devit_version }}-${{ matrix.target }}*
+
+    - name: Set SHA
+      if: matrix.config.os == 'macos-latest'
+      id: shasum
+      run: |
+        echo ::set-output name=sha::"$(shasum -a 256 ./release/gitui-mac.tar.gz | awk '{printf $1}')"
