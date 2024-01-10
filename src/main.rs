@@ -12,10 +12,14 @@ mod requests;
 struct Cli {
     #[arg(long, short, value_parser = clap::value_parser!(PathBuf), value_hint = clap::ValueHint::DirPath)]
     publish: PathBuf,
+
+    #[arg(long, short, default_value_t = false)]
+    update: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    commands::handle_publish_article(cli.publish)?;
+
+    commands::handle_publish_article(cli.publish, cli.update)?;
     Ok(())
 }
