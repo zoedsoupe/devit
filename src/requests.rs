@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::error;
 
 static USER_ENDPOINT: &str = concat!("https://dev.to/api", "/users/me");
-static ARTCLE_ENDPOINT: &str = concat!("https://dev.to/api", "/articles");
+static ARTICLE_ENDPOINT: &str = concat!("https://dev.to/api", "/articles");
 
 #[derive(Deserialize)]
 struct UserResp {
@@ -56,7 +56,7 @@ pub fn ping_user(api_key: &str) -> Result<(), Box<dyn error::Error>> {
 
 pub fn publish_article(api_key: &str, article: Article) -> Result<String> {
     let article_req = ArticleReq { article };
-    let article_resp: ArticleResp = ureq::post(ARTCLE_ENDPOINT)
+    let article_resp: ArticleResp = ureq::post(ARTICLE_ENDPOINT)
         .set("api_key", api_key)
         .send_json(article_req)?
         .into_json()?;
