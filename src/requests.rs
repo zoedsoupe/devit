@@ -96,3 +96,24 @@ pub fn publish_article(api_key: &str, article: Article) -> Result<String> {
 
     Ok(article_resp.url)
 }
+
+pub fn update_article(api_key: &str, article: Article, id: usize) -> Result<String> {
+    let article_req = ArticleReq { article };
+
+    eprintln!("{:?}", serde_json::to_string(&article_req));
+
+    let article_resp = ureq::put(format!("{}/{}", ARTICLE_ENDPOINT, id).as_str())
+        .set("api_key", api_key)
+        .send_json(article_req)?;
+
+    let article_resp: ArticleResp = match article_resp.into_json() {
+        Ok(json) => json,
+        Err(err) => {
+            eprintln!("Failed to read JSON: {}", err);
+            eprintln!("Response body: {}", err.to_string());
+            return Err(err.into());
+        }
+    };
+
+    Ok(article_resp.url)
+}
