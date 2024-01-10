@@ -62,11 +62,10 @@ pub fn ping_user(api_key: &str) -> Result<(), Box<dyn error::Error>> {
 }
 
 pub fn get_latest_article(api_key: &str) -> Result<Option<Article>> {
-    let article_resp: Vec<ArticleResp> =
-        ureq::get(format!("{}/me/unpublished", ARTICLE_ENDPOINT).as_str())
-            .set("api_key", api_key)
-            .call()?
-            .into_json()?;
+    let article_resp: Vec<ArticleResp> = ureq::get(format!("{}/me/all", ARTICLE_ENDPOINT).as_str())
+        .set("api_key", api_key)
+        .call()?
+        .into_json()?;
 
     match article_resp.first() {
         Some(&ArticleResp {
