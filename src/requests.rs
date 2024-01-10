@@ -12,22 +12,24 @@ struct UserResp {
     id: Option<i32>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct ArticleReq {
     article: Article,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Article {
-    tags: String,
-    title: String,
-    published: bool,
-    body_markdown: String,
+    pub id: Option<usize>,
+    pub tags: String,
+    pub title: String,
+    pub published: bool,
+    pub body_markdown: String,
 }
 
 impl Article {
     pub fn with_frontmatter(matter: &FrontMatter, markdown: &str) -> Self {
         Article {
+            id: None,
             tags: matter.tags.clone(),
             title: matter.title.clone(),
             published: matter.published,
@@ -38,7 +40,12 @@ impl Article {
 
 #[derive(Deserialize)]
 struct ArticleResp {
+    id: usize,
     url: String,
+    tag_list: Vec<String>,
+    title: String,
+    published: bool,
+    body_markdown: String,
 }
 
 pub fn ping_user(api_key: &str) -> Result<(), Box<dyn error::Error>> {
@@ -52,6 +59,32 @@ pub fn ping_user(api_key: &str) -> Result<(), Box<dyn error::Error>> {
     }
 
     Ok(())
+}
+
+pub fn get_latest_article(api_key: &str) -> Result<Option<Article>> {
+    let article_resp: Vec<ArticleResp> =
+        ureq::get(format!("{}/me/unpublished", ARTICLE_ENDPOINT).as_str())
+            .set("api_key", api_key)
+            .call()?
+            .into_json()?;
+
+    match article_resp.first() {
+        Some(&ArticleResp {
+            id,
+            ref url,
+            ref tag_list,
+            ref title,
+            published,
+            ref body_markdown,
+        }) => Ok(Some(Article {
+            id: Some(id),
+            tags: tag_list.join(","),
+            title: title.to_string(),
+            published: published,
+            body_markdown: body_markdown.to_string(),
+        })),
+        None => Ok(None),
+    }
 }
 
 pub fn publish_article(api_key: &str, article: Article) -> Result<String> {
